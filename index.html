@@ -102,6 +102,22 @@ header p {
   width: 110px;
 }
 
+.setting select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 140px;
+}
+
+.setting select:focus {
+  border-color: var(--accent);
+}
+
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
@@ -282,6 +298,16 @@ header p {
       <label for="suffix">Suffix</label>
       <input type="text" id="suffix" placeholder="e.g. _sm">
     </div>
+    <div class="setting">
+      <label for="format">Output format</label>
+      <select id="format">
+        <option value="original">Original</option>
+        <option value="image/png">PNG</option>
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/webp">WebP</option>
+        <option value="image/bmp">BMP</option>
+      </select>
+    </div>
   </div>
 
   <div class="dropzone" id="dropzone">
@@ -298,7 +324,8 @@ header p {
   </div>
 
   <div class="actions hidden" id="actions">
-    <button class="btn btn-primary" id="downloadAll">Download All as ZIP</button>
+    <button class="btn btn-primary" id="downloadZip">Download All as ZIP</button>
+    <button class="btn btn-primary" id="downloadAll">Download All</button>
     <button class="btn btn-secondary" id="clearAll">Clear All</button>
   </div>
 
@@ -310,6 +337,7 @@ const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const results = document.getElementById('results');
 const actions = document.getElementById('actions');
+const downloadZipBtn = document.getElementById('downloadZip');
 const downloadAllBtn = document.getElementById('downloadAll');
 const clearAllBtn = document.getElementById('clearAll');
 const progressBar = document.getElementById('progressBar');
@@ -317,18 +345,26 @@ const progressFill = document.getElementById('progressFill');
 
 const processed = [];
 
+const FORMAT_EXT = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'image/bmp': '.bmp',
+};
+
 function getSettings() {
   return {
     maxSize: Math.max(1, parseInt(document.getElementById('maxSize').value) || 1024),
     prefix: document.getElementById('prefix').value,
     suffix: document.getElementById('suffix').value,
+    format: document.getElementById('format').value,
   };
 }
 
-function buildFileName(originalName, prefix, suffix) {
+function buildFileName(originalName, prefix, suffix, targetMime) {
   const dot = originalName.lastIndexOf('.');
   const name = dot !== -1 ? originalName.substring(0, dot) : originalName;
-  const ext = dot !== -1 ? originalName.substring(dot) : '';
+  const ext = targetMime ? (FORMAT_EXT[targetMime] || '.png') : (dot !== -1 ? originalName.substring(dot) : '');
   return `${prefix}${name}${suffix}${ext}`;
 }
 
@@ -344,7 +380,7 @@ function getMimeType(fileName) {
   return map[ext] || 'image/png';
 }
 
-function resizeImage(file, maxSize) {
+function resizeImage(file, maxSize, targetFormat) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -390,7 +426,7 @@ function resizeImage(file, maxSize) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(srcCanvas, 0, 0, newW, newH);
-      const mime = getMimeType(file.name);
+      const mime = targetFormat === 'original' ? getMimeType(file.name) : targetFormat;
       const quality = (mime === 'image/jpeg' || mime === 'image/webp') ? 0.92 : undefined;
       canvas.toBlob((blob) => {
         if (!blob) return reject(new Error('Canvas toBlob failed'));
@@ -440,8 +476,9 @@ async function handleFiles(files) {
   for (let i = 0; i < imageFiles.length; i++) {
     const file = imageFiles[i];
     try {
-      const result = await resizeImage(file, settings.maxSize);
-      const fileName = buildFileName(file.name, settings.prefix, settings.suffix);
+      const result = await resizeImage(file, settings.maxSize, settings.format);
+      const targetMime = settings.format === 'original' ? null : settings.format;
+      const fileName = buildFileName(file.name, settings.prefix, settings.suffix, targetMime);
       const item = { ...result, fileName };
       processed.push(item);
       results.appendChild(createCard(item));
@@ -479,10 +516,10 @@ fileInput.addEventListener('change', () => {
 });
 
 // Download all as ZIP
-downloadAllBtn.addEventListener('click', async () => {
+downloadZipBtn.addEventListener('click', async () => {
   if (processed.length === 0) return;
-  downloadAllBtn.disabled = true;
-  downloadAllBtn.textContent = 'Creating ZIP...';
+  downloadZipBtn.disabled = true;
+  downloadZipBtn.textContent = 'Creating ZIP...';
   const zip = new JSZip();
   for (const item of processed) {
     zip.file(item.fileName, item.blob);
@@ -493,8 +530,25 @@ downloadAllBtn.addEventListener('click', async () => {
   a.download = 'resized_images.zip';
   a.click();
   URL.revokeObjectURL(a.href);
+  downloadZipBtn.disabled = false;
+  downloadZipBtn.textContent = 'Download All as ZIP';
+});
+
+// Download all sequentially
+downloadAllBtn.addEventListener('click', async () => {
+  if (processed.length === 0) return;
+  downloadAllBtn.disabled = true;
+  downloadAllBtn.textContent = 'Downloading...';
+  for (const item of processed) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(item.blob);
+    a.download = item.fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    await new Promise(r => setTimeout(r, 300));
+  }
   downloadAllBtn.disabled = false;
-  downloadAllBtn.textContent = 'Download All as ZIP';
+  downloadAllBtn.textContent = 'Download All';
 });
 
 // Clear all
