@@ -359,11 +359,37 @@ function resizeImage(file, maxSize) {
         newW = Math.round(width * scale);
         newH = Math.round(height * scale);
       }
+      // Step-down resize for high quality (halve dimensions iteratively)
+      let srcCanvas = document.createElement('canvas');
+      srcCanvas.width = width;
+      srcCanvas.height = height;
+      let srcCtx = srcCanvas.getContext('2d');
+      srcCtx.drawImage(img, 0, 0);
+
+      let curW = width;
+      let curH = height;
+      while (curW / 2 > newW || curH / 2 > newH) {
+        const halfW = Math.max(Math.round(curW / 2), newW);
+        const halfH = Math.max(Math.round(curH / 2), newH);
+        const stepCanvas = document.createElement('canvas');
+        stepCanvas.width = halfW;
+        stepCanvas.height = halfH;
+        const stepCtx = stepCanvas.getContext('2d');
+        stepCtx.imageSmoothingEnabled = true;
+        stepCtx.imageSmoothingQuality = 'high';
+        stepCtx.drawImage(srcCanvas, 0, 0, halfW, halfH);
+        srcCanvas = stepCanvas;
+        curW = halfW;
+        curH = halfH;
+      }
+
       const canvas = document.createElement('canvas');
       canvas.width = newW;
       canvas.height = newH;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, newW, newH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(srcCanvas, 0, 0, newW, newH);
       const mime = getMimeType(file.name);
       const quality = (mime === 'image/jpeg' || mime === 'image/webp') ? 0.92 : undefined;
       canvas.toBlob((blob) => {
