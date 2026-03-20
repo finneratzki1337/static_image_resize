@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timo's Image Resizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --surface-hover: #22223a;
+  --border: #2a2a4a;
+  --text: #e8e8f0;
+  --text-muted: #8888a8;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --success: #10b981;
+  --radius: 12px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.logo {
+  height: 48px;
+  margin-bottom: 0.5rem;
+}
+
+header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.settings {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setting label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.setting input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 140px;
+}
+
+.setting input:focus {
+  border-color: var(--accent);
+}
+
+.setting input[type="number"] {
+  width: 110px;
+}
+
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--surface);
+  margin-bottom: 1.5rem;
+}
+
+.dropzone:hover,
+.dropzone.dragover {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.dropzone-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.6;
+}
+
+.dropzone-text {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.dropzone-text strong {
+  color: var(--accent);
+}
+
+.dropzone input[type="file"] {
+  display: none;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn {
+  padding: 0.6rem 1.25rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+.card-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--bg);
+  padding: 0.5rem;
+}
+
+.card-info {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.card-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.35rem;
+}
+
+.card-dims {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.card-dims span {
+  margin-right: 0.5rem;
+}
+
+.card .btn {
+  width: 100%;
+  font-size: 0.8rem;
+  padding: 0.45rem;
+}
+
+.hidden { display: none !important; }
+
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+@media (max-width: 600px) {
+  .settings { flex-direction: column; }
+  .setting input, .setting input[type="number"] { width: 100%; }
+  .results { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <img src="assets/timo_logo_small.png" alt="Timo's Logo" class="logo">
+    <h1>Timo's Image Resizer</h1>
+    <p>Drag & drop images to resize them instantly in your browser</p>
+  </header>
+
+  <div class="settings">
+    <div class="setting">
+      <label for="maxSize">Max size (px)</label>
+      <input type="number" id="maxSize" value="1024" min="1">
+    </div>
+    <div class="setting">
+      <label for="prefix">Prefix</label>
+      <input type="text" id="prefix" placeholder="e.g. thumb_">
+    </div>
+    <div class="setting">
+      <label for="suffix">Suffix</label>
+      <input type="text" id="suffix" placeholder="e.g. _sm">
+    </div>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <div class="dropzone-icon">&#128444;&#65039;</div>
+    <div class="dropzone-text">
+      <strong>Click or drag & drop</strong> images here<br>
+      <small>Supports JPEG, PNG, WebP, GIF, BMP</small>
+    </div>
+    <input type="file" id="fileInput" multiple accept="image/*">
+  </div>
+
+  <div class="progress-bar hidden" id="progressBar">
+    <div class="progress-bar-fill" id="progressFill"></div>
+  </div>
+
+  <div class="actions hidden" id="actions">
+    <button class="btn btn-primary" id="downloadAll">Download All as ZIP</button>
+    <button class="btn btn-secondary" id="clearAll">Clear All</button>
+  </div>
+
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const results = document.getElementById('results');
+const actions = document.getElementById('actions');
+const downloadAllBtn = document.getElementById('downloadAll');
+const clearAllBtn = document.getElementById('clearAll');
+const progressBar = document.getElementById('progressBar');
+const progressFill = document.getElementById('progressFill');
+
+const processed = [];
+
+function getSettings() {
+  return {
+    maxSize: Math.max(1, parseInt(document.getElementById('maxSize').value) || 1024),
+    prefix: document.getElementById('prefix').value,
+    suffix: document.getElementById('suffix').value,
+  };
+}
+
+function buildFileName(originalName, prefix, suffix) {
+  const dot = originalName.lastIndexOf('.');
+  const name = dot !== -1 ? originalName.substring(0, dot) : originalName;
+  const ext = dot !== -1 ? originalName.substring(dot) : '';
+  return `${prefix}${name}${suffix}${ext}`;
+}
+
+function getMimeType(fileName) {
+  const ext = fileName.split('.').pop().toLowerCase();
+  const map = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+  };
+  return map[ext] || 'image/png';
+}
+
+function resizeImage(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { width, height } = img;
+      let newW = width;
+      let newH = height;
+      const longest = Math.max(width, height);
+      if (longest > maxSize) {
+        const scale = maxSize / longest;
+        newW = Math.round(width * scale);
+        newH = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = newW;
+      canvas.height = newH;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, newW, newH);
+      const mime = getMimeType(file.name);
+      const quality = (mime === 'image/jpeg' || mime === 'image/webp') ? 0.92 : undefined;
+      canvas.toBlob((blob) => {
+        if (!blob) return reject(new Error('Canvas toBlob failed'));
+        resolve({ blob, origW: width, origH: height, newW, newH });
+      }, mime, quality);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    img.src = url;
+  });
+}
+
+function createCard(item) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const previewUrl = URL.createObjectURL(item.blob);
+  card.innerHTML = `
+    <img class="card-preview" src="${previewUrl}" alt="${item.fileName}">
+    <div class="card-info">
+      <div class="card-name" title="${item.fileName}">${item.fileName}</div>
+      <div class="card-dims">
+        <span>${item.origW}&times;${item.origH}</span>&rarr;
+        <span>${item.newW}&times;${item.newH}</span>
+      </div>
+      <button class="btn btn-primary btn-download">Download</button>
+    </div>
+  `;
+  card.querySelector('.btn-download').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = previewUrl;
+    a.download = item.fileName;
+    a.click();
+  });
+  return card;
+}
+
+async function handleFiles(files) {
+  const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if (imageFiles.length === 0) return;
+
+  const settings = getSettings();
+  progressBar.classList.remove('hidden');
+  progressFill.style.width = '0%';
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const file = imageFiles[i];
+    try {
+      const result = await resizeImage(file, settings.maxSize);
+      const fileName = buildFileName(file.name, settings.prefix, settings.suffix);
+      const item = { ...result, fileName };
+      processed.push(item);
+      results.appendChild(createCard(item));
+    } catch (e) {
+      console.error(`Failed to process ${file.name}:`, e);
+    }
+    progressFill.style.width = `${((i + 1) / imageFiles.length) * 100}%`;
+  }
+
+  setTimeout(() => progressBar.classList.add('hidden'), 500);
+  actions.classList.toggle('hidden', processed.length === 0);
+}
+
+// Drag and drop
+dropzone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropzone.classList.add('dragover');
+});
+
+dropzone.addEventListener('dragleave', () => {
+  dropzone.classList.remove('dragover');
+});
+
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+dropzone.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFiles(fileInput.files);
+  fileInput.value = '';
+});
+
+// Download all as ZIP
+downloadAllBtn.addEventListener('click', async () => {
+  if (processed.length === 0) return;
+  downloadAllBtn.disabled = true;
+  downloadAllBtn.textContent = 'Creating ZIP...';
+  const zip = new JSZip();
+  for (const item of processed) {
+    zip.file(item.fileName, item.blob);
+  }
+  const content = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(content);
+  a.download = 'resized_images.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  downloadAllBtn.disabled = false;
+  downloadAllBtn.textContent = 'Download All as ZIP';
+});
+
+// Clear all
+clearAllBtn.addEventListener('click', () => {
+  processed.length = 0;
+  results.innerHTML = '';
+  actions.classList.add('hidden');
+});
+</script>
+</body>
+</html>
